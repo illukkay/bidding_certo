@@ -13,86 +13,47 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- *
- * @author Usuario
- */
-// Anotação que marca esta classe como um serviço do Spring (camada de negócio)
 @Service
 public class EditalService {
-    
-    // Injeta automaticamente uma instância do repositório de editais
-    // O repositório é responsável pelas operações de banco de dados relacionadas a editais
+
     @Autowired
-    private EditalRepository repository;
-    
-    // Injeta automaticamente o serviço de token
-    // É usado para validar tokens JWT e extrair informações do usuário autenticado
+    private EditalRepository editalRepository;
+
     @Autowired
     private TokenService tokenService;
-    
-    // Método responsável por criar um novo edital no sistema
-    // novo: objeto contendo os dados do edital (título, descrição, data de fechamento)
-    // token: token JWT do usuário autenticado para validação de autorização
-    public void criarEdital(EditalDTO novo, String token) {
-        // Extrai as informações do usuário a partir do token JWT
-        // Obtém id, nome e role (papel) do usuário
-        UserDTO userLogado = tokenService.extrairClaim(token);
-        
-        // Verifica se o usuário tem o papel de COMPRADOR
-        // Apenas COMPRADORES podem criar editais no sistema
-        if (userLogado.getRole().equals("COMPRADOR")) {
-            // String que acumula mensagens de erro de validação
-            String mensagem = "";
-            
-            // Valida se o título foi preenchido
-            if (novo.getTitulo().equals("")) {
-                mensagem += "Titulo não preenchido!\n";
-            }
-            // Valida se a descrição foi preenchida
-            if (novo.getDescricao().equals("")) {
-                mensagem += "Descrição não preenchida!\n";
-            }
-            // Valida se a data de fechamento foi preenchida
-            if (novo.getDataFechamento() == null) {
-                mensagem += "Data não preenchida!\n";
-            }
-            
-            // Se houver erros de validação, lança uma exceção com status 400 (Bad Request)
-            if (!mensagem.equals("")) {
-                throw new ResponseStatusException(HttpStatusCode.valueOf(400), mensagem);
-            }
-            
-            // Define o status inicial do edital como "ABERTO" para receber lances
-            novo.setStatus("ABERTO");
-            // Chama o repositório para inserir o edital no banco de dados
-            // Retorna o número de linhas afetadas pela inserção
-            int linhas = repository.criar(novo);
-            // Valida se a inserção foi bem-sucedida
-            if(linhas == 0) {
-                // Se nenhuma linha foi afetada, lança exceção com status 500 (Erro Interno do Servidor)
-                throw new ResponseStatusException(HttpStatusCode.valueOf(500), 
-                "Erro ao cadastrar no banco de dados");
-            }
-        } else {
-            // Se o usuário não é COMPRADOR, lança exceção com status 403 (Acesso Proibido)
-            throw new ResponseStatusException(HttpStatusCode.valueOf(403), 
-                    "Acesso não autorizado!");
+
+    public void novoEdital(EditalDTO edital, UserDTO usuarioLogado) {
+        String message = "";
+        if (!usuarioLogado.getRole().equals("COMPRADOR")) {
+            throw new ResponseStatusException(HttpStatusCode.valueOf(403),
+                    "Acesso negado: apenas usuários com role COMPRADOR podem criar editais"
+            );
         }
-        
+        if (edital.getTitulo().isEmpty()) {
+            message += "Título não preenchido!";
+        }
+        if (edital.getDescricao().isEmpty()) {
+            message += "Descrição não preenchida!";
+        }
+        if (edital.getData_fechamento() == null) {
+            message += "Data não preenchida!";
+        }
+        if (!message.isEmpty()) {
+            throw new ResponseStatusException(HttpStatusCode.valueOf(400), message);
+        }
+        edital.setStatus("ABERTO");
+        int rows = editalRepository.novoEdital(edital);
+        if (rows == 0) {
+            throw new ResponseStatusException(HttpStatusCode.valueOf(500),
+                    "Erro ao criar edital");
+        }
     }
 
-    // Método para listar todos os editais cadastrados no sistema
-    // token: token JWT do usuário autenticado para validação
-    // Retorna: lista de todos os editais disponíveis
-    public List<EditalDTO> listarEditais(String token) {
-        // Valida se o token é válido e não expirou
-        if(tokenService.validarToken(token)) {
-            // Se o token é válido, retorna a lista de editais do repositório
-            return repository.listar();
+    public List<EditalDTO> listaEdital(String authHeader) {
+        if (tokenService.validarToken(authHeader)) {
+            return editalRepository.listaEdital();
         } else {
-            // Se o token é inválido ou expirou, lança exceção com status 401 (Não Autorizado)
-            throw new ResponseStatusException(HttpStatusCode.valueOf(401), "Necessário Logar com conta valida");
+            throw new ResponseStatusException(HttpStatusCode.valueOf(401), "Token inválido!");
         }
     }
 }
